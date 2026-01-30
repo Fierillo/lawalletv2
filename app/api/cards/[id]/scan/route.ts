@@ -4,9 +4,8 @@ import { LUD03Request } from '@/types/lnurl'
 import { getSettings } from '@/lib/settings'
 import { withErrorHandling } from '@/types/server/error-handler'
 import { NotFoundError } from '@/types/server/errors'
-import { idParam, scanCardQuerySchema } from '@/lib/validation/schemas'
-import { validateParams, validateQuery } from '@/lib/validation/middleware'
-import { rateLimit, RateLimitPresets } from '@/lib/middleware/rate-limit'
+import { scanCardQuerySchema } from '@/lib/validation/schemas'
+import { validateQuery } from '@/lib/validation/middleware'
 
 export const OPTIONS = withErrorHandling(async (_req: NextRequest) => {
   return new NextResponse(null, {
@@ -21,10 +20,9 @@ export const OPTIONS = withErrorHandling(async (_req: NextRequest) => {
 
 export const GET = withErrorHandling(
   async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
-  // Apply rate limiting for card scan (high volume endpoint)
-  await rateLimit(req, RateLimitPresets.cardScan)
+  const { id: cardId } = await params
 
-  const { id: cardId } = validateParams(await params, idParam)
+  // Get query parameters
   const { p, c } = validateQuery(req.url, scanCardQuerySchema)
 
   // Find card by id in database
