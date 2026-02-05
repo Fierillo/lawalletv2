@@ -23,7 +23,7 @@ import { checkRequestLimits } from '@/lib/middleware/request-limits'
  * and returns a JWT with pubkey, role, and permissions baked in.
  */
 export const POST = withErrorHandling(async (request: NextRequest) => {
-  await checkRequestLimits(request, 'json')
+  // Apply strict rate limiting for authentication endpoint
   await rateLimit(request, RateLimitPresets.auth)
 
   // 1. Validate NIP-98 authentication
