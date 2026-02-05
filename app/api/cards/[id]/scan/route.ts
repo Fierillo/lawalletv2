@@ -4,8 +4,8 @@ import { LUD03Request } from '@/types/lnurl'
 import { getSettings } from '@/lib/settings'
 import { withErrorHandling } from '@/types/server/error-handler'
 import { NotFoundError } from '@/types/server/errors'
-import { scanCardQuerySchema } from '@/lib/validation/schemas'
-import { validateQuery } from '@/lib/validation/middleware'
+import { idParam, scanCardQuerySchema } from '@/lib/validation/schemas'
+import { validateParams, validateQuery } from '@/lib/validation/middleware'
 import { rateLimit, RateLimitPresets } from '@/lib/middleware/rate-limit'
 
 export const OPTIONS = withErrorHandling(async (_req: NextRequest) => {
@@ -24,7 +24,7 @@ export const GET = withErrorHandling(
   // Apply rate limiting for card scan (high volume endpoint)
   await rateLimit(req, RateLimitPresets.cardScan)
 
-  // Get query parameters
+  const { id: cardId } = validateParams(await params, idParam)
   const { p, c } = validateQuery(req.url, scanCardQuerySchema)
 
   // Find card by id in database
