@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { AlertCircle, Loader2, QrCode } from 'lucide-react'
 
@@ -14,7 +14,7 @@ import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { LaWalletIcon } from '@/components/icon/lawallet'
 
-export default function WalletLoginPage() {
+function WalletLoginPageContent() {
   const [nsecInput, setNsecInput] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
@@ -259,4 +259,8 @@ export default function WalletLoginPage() {
       </AppViewport>
     </>
   )
+}
+
+export default function WalletLoginPage() {
+  return <Suspense fallback={<div>Loading...</div>}><WalletLoginPageContent /></Suspense>
 }

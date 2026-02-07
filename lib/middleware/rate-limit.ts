@@ -1,6 +1,7 @@
 import { getConfig } from '@/lib/config'
 import { TooManyRequestsError } from '@/types/server/errors'
 import { logger } from '@/lib/logger'
+import { PayloadTooLargeError } from '@/types/server/errors'
 
 /**
  * Rate limit result with metadata for headers
