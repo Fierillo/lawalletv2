@@ -46,7 +46,7 @@ export const CardsProvider = ({ children }: { children: React.ReactNode }) => {
   const list = useCallback(async () => {
     const response = await apiGet('/api/cards')
     if (response.error) {
-      throw new Error(response.error)
+      throw new Error(typeof response.error === 'string' ? response.error : JSON.stringify(response.error))
     }
     return response.data.map(parseCardDates) as Card[]
   }, [apiGet])
@@ -68,7 +68,7 @@ export const CardsProvider = ({ children }: { children: React.ReactNode }) => {
   const getPairedCards = useCallback(async () => {
     const response = await apiGet('/api/cards?paired=true')
     if (response.error) {
-      throw new Error(response.error)
+      throw new Error(typeof response.error === 'string' ? response.error : JSON.stringify(response.error))
     }
     return response.data.map(parseCardDates) as Card[]
   }, [apiGet])
@@ -76,7 +76,7 @@ export const CardsProvider = ({ children }: { children: React.ReactNode }) => {
   const getUnpairedCards = useCallback(async () => {
     const response = await apiGet('/api/cards?paired=false')
     if (response.error) {
-      throw new Error(response.error)
+      throw new Error(typeof response.error === 'string' ? response.error : JSON.stringify(response.error))
     }
     return response.data.map(parseCardDates) as Card[]
   }, [apiGet])
@@ -84,7 +84,7 @@ export const CardsProvider = ({ children }: { children: React.ReactNode }) => {
   const getUsedCards = useCallback(async () => {
     const response = await apiGet('/api/cards?used=true')
     if (response.error) {
-      throw new Error(response.error)
+      throw new Error(typeof response.error === 'string' ? response.error : JSON.stringify(response.error))
     }
     return response.data.map(parseCardDates) as Card[]
   }, [apiGet])
@@ -97,7 +97,7 @@ export const CardsProvider = ({ children }: { children: React.ReactNode }) => {
       })
 
       if (response.error) {
-        throw new Error(response.error)
+        throw new Error(typeof response.error === 'string' ? response.error : JSON.stringify(response.error))
       }
 
       return parseCardDates(response.data)
@@ -110,7 +110,7 @@ export const CardsProvider = ({ children }: { children: React.ReactNode }) => {
       const response = await deleteRequest(`/api/cards/${id}`)
 
       if (response.error) {
-        throw new Error(response.error)
+        throw new Error(typeof response.error === 'string' ? response.error : JSON.stringify(response.error))
       }
     },
     [deleteRequest]
@@ -119,7 +119,7 @@ export const CardsProvider = ({ children }: { children: React.ReactNode }) => {
   const getStatusCounts = useCallback(async () => {
     const response = await apiGet('/api/cards/counts')
     if (response.error) {
-      throw new Error(response.error)
+      throw new Error(typeof response.error === 'string' ? response.error : JSON.stringify(response.error))
     }
     return response.data as {
       paired: number

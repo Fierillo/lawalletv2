@@ -1,8 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { AlertCircle, Loader2 } from 'lucide-react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { AlertCircle, Loader2, QrCode } from 'lucide-react'
 
 import { useAPI } from '@/providers/api'
 import { generatePrivateKey, nsecToHex, validateNsec } from '@/lib/nostr'
@@ -18,8 +18,9 @@ export default function WalletLoginPage() {
   const [nsecInput, setNsecInput] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState('')
-  const { loginWithPrivateKey, loginWithSigner, isHydrated, signer } = useAPI()
+  const { loginWithPrivateKey, loginWithSigner, isHydrated, signer, setUserId, setLoginMethod } = useAPI()
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   const handleGenerateWallet = async () => {
     setIsLoading(true)
@@ -65,18 +66,65 @@ export default function WalletLoginPage() {
     setIsLoading(true)
     setError('')
     try {
-      if (!window.nostr) {
-        throw new Error('No Nostr extension found. Please install Alby or nos2x.')
+      // Try browser extension first
+      if (window.nostr) {
+        await window.nostr.getPublicKey()
+        loginWithSigner(window.nostr)        
+        setLoginMethod('nip07')        
+        router.push('/wallet')
+        return
       }
-      await window.nostr.getPublicKey()
-      loginWithSigner(window.nostr)
-      router.push('/wallet')
+
+      // Mobile: try Amber (NIP-55)
+      const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+      if (isMobile) {
+        const callbackUrl = encodeURIComponent(`${window.location.origin}/wallet/login?pubkey=`)
+        const amberUri = `nostrsigner:?compressionType=none&returnType=signature&type=get_public_key&callbackUrl=${callbackUrl}`
+
+        window.location.href = amberUri
+      } else {
+        throw new Error('No Nostr extension found. Please install Alby, nos2x, or use Amber on mobile.')
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to connect')
+
     } finally {
       setIsLoading(false)
     }
   }
+
+  // Handle Amber callback
+  useEffect(() => {
+    if (sessionStorage.getItem('amberProcessed')) return
+
+    const pubkey = searchParams.get('pubkey') || searchParams.get('result')
+    if (pubkey) {
+      const url = new URL(window.location.href)
+      url.searchParams.delete('pubkey')
+      url.searchParams.delete('result')
+      window.history.replaceState({}, '', url.toString())
+
+      if (!/^[0-9a-f]{64}$/i.test(pubkey)) {
+        setError('Invalid pubkey from Amber')
+        setIsLoading(false)
+        return
+      }
+
+      const amberSigner = {
+        getPublicKey: async () => pubkey,
+        signEvent: async (event: any) => ({
+          ...event,
+          sig: '00'.repeat(64)
+        })
+      } as any
+
+      loginWithSigner(amberSigner)
+      setLoginMethod('amber')
+      setUserId(`amber-${pubkey.slice(0, 8)}`)
+      sessionStorage.setItem('amberProcessed', 'true')
+      router.push('/wallet')
+    }
+  }, [searchParams, loginWithSigner, setUserId, router])
 
   useEffect(() => {
     if (signer) {
@@ -87,6 +135,12 @@ export default function WalletLoginPage() {
       setIsLoading(false)
     }
   }, [isHydrated, signer, router])
+
+  useEffect(() => {
+    if (!signer && sessionStorage.getItem('amberProcessed')) {
+      sessionStorage.removeItem('amberProcessed')
+    }
+  }, [signer])
 
   if (isLoading) {
     return (
@@ -164,14 +218,17 @@ export default function WalletLoginPage() {
                   <>Login with Extension</>
                 )}
               </Button>
+
+
             </div>
 
             {error && (
               <Alert
                 variant="destructive"
-                className="bg-red-500/10 border-red-500/20 backdrop-blur-sm"
+                className="bg-red-500/20 border-red-500/50 backdrop-blur-sm"
               >
                 <AlertCircle className="size-4 text-red-400" />
+              
                 <AlertDescription className="text-red-300">
                   {error}
                 </AlertDescription>

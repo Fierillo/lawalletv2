@@ -14,6 +14,7 @@ import {
   NRelay1,
   NSecSigner
 } from '@nostrify/nostrify'
+
 import { createNip98Token } from '@/lib/nip98'
 import { bytesToHex, hexToBytes } from 'nostr-tools/utils'
 import { parseBunkerUrl } from '@/lib/nostr'
@@ -24,7 +25,7 @@ interface APIResponse<T = any> {
   status: number
 }
 
-export type LoginMethod = 'nsec' | 'nip07' | 'bunker'
+export type LoginMethod = 'nsec' | 'nip07' | 'bunker' | 'amber'
 
 interface APIContextType {
   get: <T = any>(url: string) => Promise<APIResponse<T>>
@@ -40,8 +41,9 @@ interface APIContextType {
   isHydrated: boolean
   signer: NostrSigner | null
   loginWithPrivateKey: (privateKeyHex: string) => Promise<void>
-  loginWithSigner: (signer: NostrSigner) => Promise<void>
+  loginWithSigner: (signer: NostrSigner, method?: LoginMethod) => Promise<void>
   loginWithBunker: (bunkerUrl: string) => Promise<void>
+  setLoginMethod: (method: LoginMethod) => void
   logout: () => void
   loginMethod: LoginMethod | null
   getUserId: () => Promise<{
@@ -80,6 +82,7 @@ export function APIProvider({ children }: { children: React.ReactNode }) {
     setPublicKey(null)
     setUserId(null)
     localStorage.removeItem('api')
+    sessionStorage.removeItem('amberProcessed')
   }, [setSigner, setPrivateKey, setLoginMethod, setPublicKey, setUserId])
 
   const loginWithPrivateKey = useCallback(
@@ -104,10 +107,9 @@ export function APIProvider({ children }: { children: React.ReactNode }) {
     async (signer: NostrSigner) => {
       logout()
       setSigner(signer)
-      setLoginMethod('nip07')
       setPublicKey(await signer.getPublicKey())
     },
-    [setSigner, setPublicKey, setLoginMethod, logout]
+    [setSigner, setPublicKey, logout]
   )
 
   const loginWithBunker = useCallback(
@@ -134,6 +136,8 @@ export function APIProvider({ children }: { children: React.ReactNode }) {
     [setLoginMethod, logout]
   )
 
+
+
   // Load private key and userId from localStorage on mount
   useEffect(() => {
     const savedApiData = localStorage.getItem('api')
@@ -150,6 +154,20 @@ export function APIProvider({ children }: { children: React.ReactNode }) {
             }
             setLoginMethod('nip07')
             loginWithSigner(window.nostr)
+            break
+          case 'amber':
+            const pubkey = parsed.publicKey
+            const amberSigner = {
+              getPublicKey: async () => pubkey,
+              signEvent: async (event: any) => ({
+                ...event,
+                sig: '00'.repeat(64)
+              })
+            } as any
+            setPublicKey(pubkey)
+            setLoginMethod('amber')
+            setSigner(amberSigner)
+            setUserId(parsed.userId)
             break
           case 'bunker':
             loginWithBunker(
@@ -176,6 +194,7 @@ export function APIProvider({ children }: { children: React.ReactNode }) {
         'api',
         JSON.stringify({
           privateKey,
+          publicKey,
           userId,
           method: loginMethod,
           bunker: bunkerData
@@ -305,6 +324,7 @@ export function APIProvider({ children }: { children: React.ReactNode }) {
     isHydrated,
     loginWithPrivateKey,
     loginWithSigner,
+    setLoginMethod,
     loginMethod,
     signer,
     loginWithBunker,

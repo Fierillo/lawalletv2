@@ -21,6 +21,7 @@
     "@babel/runtime": "^7.28.6",
     "@getalby/sdk": "^7.0.0",
     "@hookform/resolvers": "^5.2.2",
+    "@nostr-connect/connect": "^0.4.0",
     "@nostrify/nostrify": "npm:@jsr/nostrify__nostrify@^0.46.5",
     "@prisma/client": "^6.19.2",
     "@radix-ui/react-accordion": "latest",
