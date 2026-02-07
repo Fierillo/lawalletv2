@@ -1,5 +1,5 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "pnpm prisma migrate deploy && next build"
+  "buildCommand": "pnpm prisma migrate resolve --applied 20260130001619_user_role_enum || true && pnpm prisma migrate deploy && next build"
 }
