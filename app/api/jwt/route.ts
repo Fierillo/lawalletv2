@@ -24,6 +24,7 @@ import { checkRequestLimits } from '@/lib/middleware/request-limits'
  */
 export const POST = withErrorHandling(async (request: NextRequest) => {
   // Apply strict rate limiting for authentication endpoint
+  await checkRequestLimits(request, 'json')
   await rateLimit(request, RateLimitPresets.auth)
 
   // 1. Validate NIP-98 authentication

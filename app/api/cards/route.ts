@@ -9,6 +9,8 @@ import { validateBody, validateQuery } from '@/lib/validation/middleware'
 import { authenticateWithRole } from '@/lib/auth/unified-auth'
 import { Role } from '@/lib/auth/permissions'
 import { checkRequestLimits } from '@/lib/middleware/request-limits'
+import { authenticateWithRole } from '@/lib/auth/unified-auth'
+import { Role } from '@/lib/auth/permissions'
 
 interface CardFilters {
   paired?: boolean
