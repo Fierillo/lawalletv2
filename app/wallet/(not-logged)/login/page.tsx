@@ -6,6 +6,7 @@ import { AlertCircle, Loader2, QrCode } from 'lucide-react'
 
 import { useAPI } from '@/providers/api'
 import { generatePrivateKey, nsecToHex, validateNsec } from '@/lib/nostr'
+import { hasNip07Extension, isNos2xInstalledButInaccessible, getNip07ErrorMessage, loginWithNip07 } from '@/lib/nip07'
 
 import { AppContent, AppFooter, AppViewport } from '@/components/app'
 import { Button } from '@/components/ui/button'
@@ -66,28 +67,28 @@ function WalletLoginPageContent() {
     setIsLoading(true)
     setError('')
     try {
-      // Try browser extension first
-      if (window.nostr) {
-        await window.nostr.getPublicKey()
-        loginWithSigner(window.nostr)        
-        setLoginMethod('nip07')        
+      if (hasNip07Extension()) {
+        const pubkey = await loginWithNip07(window.nostr!)
+        loginWithSigner(window.nostr!)
+        setLoginMethod('nip07')
         router.push('/wallet')
         return
       }
 
-      // Mobile: try Amber (NIP-55)
+      if (isNos2xInstalledButInaccessible()) {
+        throw new Error(getNip07ErrorMessage(new Error('nos2x inaccessible')))
+      }
+
       const isMobile = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
       if (isMobile) {
         const callbackUrl = encodeURIComponent(`${window.location.origin}/wallet/login?pubkey=`)
         const amberUri = `nostrsigner:?compressionType=none&returnType=signature&type=get_public_key&callbackUrl=${callbackUrl}`
-
         window.location.href = amberUri
       } else {
         throw new Error('No Nostr extension found. Please install Alby, nos2x, or use Amber on mobile.')
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to connect')
-
+      setError(getNip07ErrorMessage(err))
     } finally {
       setIsLoading(false)
     }

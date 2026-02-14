@@ -15,6 +15,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Eye, EyeOff, Zap, Key, Link, Lock, Camera } from 'lucide-react'
 import { useAPI } from '@/providers/api'
 import { nsecToHex } from '@/lib/nostr'
+import { hasNip07Extension, isNos2xInstalledButInaccessible, getNip07ErrorMessage, loginWithNip07 } from '@/lib/nip07'
 import { QRScanner } from '@/components/ui/qr-scanner'
 
 export function Login() {
@@ -26,19 +27,24 @@ export function Login() {
   const [bunkerUri, setBunkerUri] = useState('')
 
   const handleNip07Login = async () => {
+    console.log('[NIP-07] Starting login...')
     setIsLoading(true)
     setError('')
 
     try {
-      if (!window.nostr) {
-        throw new Error(
-          'No Nostr extension found. Please install Alby or nos2x.'
-        )
+      if (!hasNip07Extension()) {
+        if (isNos2xInstalledButInaccessible()) {
+          throw new Error(getNip07ErrorMessage(new Error('nos2x inaccessible')))
+        }
+        throw new Error('No Nostr extension found. Please install Alby or nos2x.')
       }
-      await window.nostr.getPublicKey()
-      loginWithSigner(window.nostr)
+
+      const pubkey = await loginWithNip07(window.nostr!)
+      loginWithSigner(window.nostr!)
+      console.log('[NIP-07] Login successful:', pubkey)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to connect')
+      console.error('[NIP-07] Login error:', err)
+      setError(getNip07ErrorMessage(err))
     } finally {
       setIsLoading(false)
     }
