@@ -66,19 +66,6 @@ export interface AppConfig {
       enabled: boolean
     }
   }
-
-  // Rate Limiting
-  rateLimit: {
-    enabled: boolean
-    windowMs: number
-    maxRequests: number
-    maxRequestsAuth: number
-    upstash: {
-      url: string | undefined
-      token: string | undefined
-      enabled: boolean
-    }
-  }
 }
 
 let cachedConfig: AppConfig | null = null
