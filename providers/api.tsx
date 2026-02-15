@@ -237,10 +237,12 @@ export function APIProvider({ children }: { children: React.ReactNode }) {
         const responseData = await response.json().catch(() => null)
 
         if (!response.ok) {
+          const errorData = responseData?.error
+          const errorMessage = errorData?.message 
+            ? `${errorData.message}${errorData.code ? ` (${errorData.code})` : ''}`
+            : `HTTP ${response.status}: ${response.statusText}`
           return {
-            error:
-              responseData?.error ||
-              `HTTP ${response.status}: ${response.statusText}`,
+            error: errorMessage,
             status: response.status
           }
         }

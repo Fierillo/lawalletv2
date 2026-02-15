@@ -35,7 +35,7 @@ export const CardDesignsProvider = ({
 
   const list = useCallback(async () => {
     const response = await apiGet('/api/card-designs/list')
-    if (response.error) throw new Error(response.error)
+    if (response.error) throw new Error(String(response.error))
     return response.data.map((design: any) => {
       return { ...design, createdAt: new Date(design.createdAt) }
     })
@@ -52,7 +52,7 @@ export const CardDesignsProvider = ({
 
   const count = useCallback(async () => {
     const response = await apiGet('/api/card-designs/count')
-    if (response.error) throw new Error(response.error)
+    if (response.error) throw new Error(String(response.error))
     return response.data.count
   }, [apiGet])
 
@@ -60,7 +60,7 @@ export const CardDesignsProvider = ({
     const response = await apiPost('/api/card-designs/import')
 
     if (response.error) {
-      throw new Error(response.error)
+      throw new Error(String(response.error))
     }
 
     // Convert createdAt strings to Date objects if designs are returned
