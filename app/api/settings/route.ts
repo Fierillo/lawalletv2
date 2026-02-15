@@ -2,150 +2,66 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getSettings } from '@/lib/settings'
 import { validateNip98Auth } from '@/lib/admin-auth'
+import { withErrorHandling } from '@/types/server/error-handler'
+import { AuthorizationError, ValidationError } from '@/types/server/errors'
+import { settingsBodySchema } from '@/lib/validation/schemas'
+import { validateBody } from '@/lib/validation/middleware'
+import { checkRequestLimits } from '@/lib/middleware/request-limits'
 
-// Validation function for setting names
-function validateSettingName(name: string): string | null {
-  // Trim the name
-  const trimmed = name.trim()
+export const GET = withErrorHandling(async (request: NextRequest) => {
+  // Fetch all settings records from the database
+  const settings = await getSettings()
 
-  // Check if empty after trimming
-  if (!trimmed) {
-    return 'Setting name cannot be empty'
-  }
-
-  // Check length (max 32 characters)
-  if (trimmed.length > 32) {
-    return 'Setting name cannot exceed 32 characters'
-  }
-
-  // Check if only contains alphanumeric characters, hyphens, and underscores
-  const validPattern = /^[a-z0-9_-]+$/
-  if (!validPattern.test(trimmed)) {
-    return 'Setting name can only contain lowercase letters, numbers, hyphens, and underscores'
-  }
-
-  return null
-}
-
-export async function GET(request: NextRequest) {
-  try {
-    // Fetch all settings records from the database
-    const settings = await getSettings()
-
-    // Validate authentication
-    let authenticatedPubkey: string
-    try {
-      authenticatedPubkey = await validateNip98Auth(request)
-    } catch {
-      authenticatedPubkey = ''
-    }
-
-    if (!authenticatedPubkey || authenticatedPubkey !== settings.root) {
-      return NextResponse.json({
-        domain: settings.domain,
-        endpoint: settings.endpoint
-      })
-    }
-
-    return NextResponse.json(settings)
-  } catch (error) {
-    console.error('Error fetching settings:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
-  }
-}
-
-export async function POST(request: NextRequest) {
   // Validate authentication
   let authenticatedPubkey: string
   try {
     authenticatedPubkey = await validateNip98Auth(request)
-  } catch (response) {
-    if (response instanceof NextResponse) {
-      return response
-    }
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  } catch {
+    authenticatedPubkey = ''
   }
+
+  if (!authenticatedPubkey || authenticatedPubkey !== settings.root) {
+    return NextResponse.json({
+      domain: settings.domain,
+      endpoint: settings.endpoint
+    })
+  }
+
+  return NextResponse.json(settings)
+})
+
+export const POST = withErrorHandling(async (request: NextRequest) => {
+  await checkRequestLimits(request, 'json')
+  // Validate authentication
+  const authenticatedPubkey = await validateNip98Auth(request)
 
   // Fetch all settings records from the database
   const settings = await getSettings(['root'])
 
   if (authenticatedPubkey !== settings.root) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    throw new AuthorizationError('Not authorized to update settings')
   }
 
-  try {
-    const body = await request.json()
+  const body = await validateBody(request, settingsBodySchema)
 
-    // Validate that body is an object
-    if (typeof body !== 'object' || body === null || Array.isArray(body)) {
-      return NextResponse.json(
-        { error: 'Request body must be a JSON object' },
-        { status: 400 }
-      )
-    }
+  const processedSettings = Object.entries(body).map(([name, value]) => ({
+    name: name.trim().toLowerCase(),
+    value,
+  }))
 
-    const settingsToUpsert = Object.entries(body)
-    const validationErrors: string[] = []
-    const processedSettings: Array<{ name: string; value: string }> = []
-
-    // Validate and process each setting
-    for (const [name, value] of settingsToUpsert) {
-      // Validate name
-      const nameError = validateSettingName(name)
-      if (nameError) {
-        validationErrors.push(`${name}: ${nameError}`)
-        continue
-      }
-
-      // Validate value (must be string)
-      if (typeof value !== 'string') {
-        validationErrors.push(`${name}: Value must be a string`)
-        continue
-      }
-
-      // Process the name (trim and lowercase)
-      const processedName = name.trim().toLowerCase()
-
-      processedSettings.push({
-        name: processedName,
-        value: value
-      })
-    }
-
-    // Return validation errors if any
-    if (validationErrors.length > 0) {
-      return NextResponse.json(
-        {
-          error: 'Validation errors',
-          details: validationErrors
-        },
-        { status: 400 }
-      )
-    }
-
-    // Upsert each setting
-    const upsertPromises = processedSettings.map(({ name, value }) =>
-      prisma.settings.upsert({
-        where: { name },
-        update: { value },
-        create: { name, value }
-      })
-    )
-
-    await Promise.all(upsertPromises)
-
-    return NextResponse.json({
-      message: 'Settings updated successfully',
-      count: processedSettings.length
+  // Upsert each setting
+  const upsertPromises = processedSettings.map(({ name, value }) =>
+    prisma.settings.upsert({
+      where: { name },
+      update: { value },
+      create: { name, value }
     })
-  } catch (error) {
-    console.error('Error upserting settings:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
-  }
-}
+  )
+
+  await Promise.all(upsertPromises)
+
+  return NextResponse.json({
+    message: 'Settings updated successfully',
+    count: processedSettings.length
+  })
+})

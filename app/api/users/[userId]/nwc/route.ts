@@ -1,33 +1,22 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { validateNip98 } from '@/lib/nip98'
+import { withErrorHandling } from '@/types/server/error-handler'
+import {
+  AuthorizationError,
+  NotFoundError,
+} from '@/types/server/errors'
+import { userIdParam, updateNwcSchema } from '@/lib/validation/schemas'
+import { validateParams, validateBody } from '@/lib/validation/middleware'
+import { checkRequestLimits } from '@/lib/middleware/request-limits'
+import { authenticate } from '@/lib/auth/unified-auth'
 
-export async function PUT(
-  request: Request,
-  { params }: { params: { userId: string } }
-) {
-  try {
-    const { pubkey: authenticatedPubkey } = await validateNip98(request)
+export const PUT = withErrorHandling(
+  async (request: Request, { params }: { params: Promise<{ userId: string }> }) => {
+    await checkRequestLimits(request, 'json')
+    const { pubkey: authenticatedPubkey } = await authenticate(request)
 
-    // Read the request body for our data
-    const { nwcUri } = await request.json()
-
-    const { userId } = params
-
-    // Validate input
-    if (!userId) {
-      return NextResponse.json(
-        { error: 'User ID is required' },
-        { status: 400 }
-      )
-    }
-
-    if (!nwcUri) {
-      return NextResponse.json(
-        { error: 'NWC URI is required' },
-        { status: 400 }
-      )
-    }
+    const { nwcUri } = await validateBody(request, updateNwcSchema)
+    const { userId } = validateParams(await params, userIdParam)
 
     // Check if user exists
     const user = await prisma.user.findUnique({
@@ -35,11 +24,11 @@ export async function PUT(
     })
 
     if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      throw new NotFoundError('User not found')
     }
 
     if (user.pubkey !== authenticatedPubkey) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      throw new AuthorizationError('Not authorized to update this user')
     }
 
     // Update the user's NWC URI
@@ -53,11 +42,5 @@ export async function PUT(
       nwcUri: updatedUser.nwc,
       updated: true
     })
-  } catch (error) {
-    console.error('Error updating NWC URI:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
   }
-}
+)

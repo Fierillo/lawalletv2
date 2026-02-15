@@ -1,18 +1,14 @@
-import { validateNip98 } from '@/lib/nip98'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { createNewUser } from '@/lib/user'
 import { getSettings } from '@/lib/settings'
+import { withErrorHandling } from '@/types/server/error-handler'
+import { authenticate } from '@/lib/auth/unified-auth'
 
-export async function GET(request: Request) {
-  try {
-    let authenticatedPubkey: string
-    try {
-      const { pubkey } = await validateNip98(request)
-      authenticatedPubkey = pubkey
-    } catch (error) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+export const dynamic = 'force-dynamic'
+
+export const GET = withErrorHandling(async (request: Request) => {
+  const { pubkey: authenticatedPubkey } = await authenticate(request)
 
     const existingUser = await prisma.user.findUnique({
       where: {
@@ -32,23 +28,16 @@ export async function GET(request: Request) {
       ? `${user.lightningAddress.username}@${domain}`
       : null
 
-    return NextResponse.json({
-      userId: user.id,
-      lightningAddress,
-      albySubAccount: user.albySubAccount
-        ? {
-            appId: user.albySubAccount.appId,
-            nwcUri: user.albySubAccount.nwcUri,
-            username: user.albySubAccount.username
-          }
-        : null,
-      nwcString: user.albySubAccount ? user.albySubAccount.nwcUri : ''
-    })
-  } catch (error) {
-    console.error('Error in GET /api/users/me:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
-  }
-}
+  return NextResponse.json({
+    userId: user.id,
+    lightningAddress,
+    albySubAccount: user.albySubAccount
+      ? {
+          appId: user.albySubAccount.appId,
+          nwcUri: user.albySubAccount.nwcUri,
+          username: user.albySubAccount.username
+        }
+      : null,
+    nwcString: user.albySubAccount ? user.albySubAccount.nwcUri : ''
+  })
+})

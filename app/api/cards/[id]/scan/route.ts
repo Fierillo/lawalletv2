@@ -1,10 +1,14 @@
-import { nwc } from '@getalby/sdk'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { LUD03Request } from '@/types/lnurl'
 import { getSettings } from '@/lib/settings'
+import { withErrorHandling } from '@/types/server/error-handler'
+import { NotFoundError } from '@/types/server/errors'
+import { idParam, scanCardQuerySchema } from '@/lib/validation/schemas'
+import { validateParams, validateQuery } from '@/lib/validation/middleware'
+import { rateLimit, RateLimitPresets } from '@/lib/middleware/rate-limit'
 
-export async function OPTIONS() {
+export const OPTIONS = withErrorHandling(async (_req: NextRequest) => {
   return new NextResponse(null, {
     status: 204,
     headers: {
@@ -13,16 +17,15 @@ export async function OPTIONS() {
       'Access-Control-Allow-Headers': 'Content-Type, LAWALLET_ACTION'
     }
   })
-}
+})
 
-export async function GET(
-  req: NextRequest,
-  { params: { id: cardId } }: { params: { id: string } }
-) {
-  // Get query parameters
-  const searchParams = req.nextUrl.searchParams
-  const p = searchParams.get('p') || ''
-  const c = searchParams.get('c') || ''
+export const GET = withErrorHandling(
+  async (req: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
+  // Apply rate limiting for card scan (high volume endpoint)
+  await rateLimit(req, RateLimitPresets.cardScan)
+
+  const { id: cardId } = validateParams(await params, idParam)
+  const { p, c } = validateQuery(req.url, scanCardQuerySchema)
 
   // Find card by id in database
   const card = await prisma.card.findUnique({
@@ -34,10 +37,7 @@ export async function GET(
   })
 
   if (!card) {
-    return NextResponse.json(
-      { error: 'Card not found' },
-      { status: 404, headers: { 'Access-Control-Allow-Origin': '*' } }
-    )
+    throw new NotFoundError('Card not found')
   }
 
   const { endpoint } = await getSettings(['endpoint'])
@@ -57,4 +57,6 @@ export async function GET(
       'Access-Control-Allow-Origin': '*'
     }
   })
-}
+  },
+  { headers: { 'Access-Control-Allow-Origin': '*' } }
+)

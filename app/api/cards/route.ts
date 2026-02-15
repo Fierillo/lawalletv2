@@ -3,36 +3,27 @@ import { prisma } from '@/lib/prisma'
 import type { Card } from '@/types/card'
 import { generateNtag424Values } from '@/lib/ntag424'
 import { randomBytes } from 'crypto'
-import { validateAdminAuth } from '@/lib/admin-auth'
+import { withErrorHandling } from '@/types/server/error-handler'
+import { createCardSchema, cardListQuerySchema } from '@/lib/validation/schemas'
+import { validateBody, validateQuery } from '@/lib/validation/middleware'
+import { authenticateWithRole } from '@/lib/auth/unified-auth'
+import { Role } from '@/lib/auth/permissions'
+import { checkRequestLimits } from '@/lib/middleware/request-limits'
 
 interface CardFilters {
   paired?: boolean
   used?: boolean
 }
 
-export async function GET(request: Request) {
-  try {
-    await validateAdminAuth(request)
-  } catch (response) {
-    if (response instanceof NextResponse) {
-      return response
-    }
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
-  }
+export const GET = withErrorHandling(async (request: Request) => {
+  await authenticateWithRole(request, Role.ADMIN)
 
-  const { searchParams } = new URL(request.url)
+  const query = validateQuery(request.url, cardListQuerySchema)
 
   // Parse filters from query params
   const filters: CardFilters = {
-    paired: searchParams.has('paired')
-      ? searchParams.get('paired') === 'true'
-      : undefined,
-    used: searchParams.has('used')
-      ? searchParams.get('used') === 'true'
-      : undefined
+    paired: query.paired !== undefined ? query.paired === 'true' : undefined,
+    used: query.used !== undefined ? query.used === 'true' : undefined,
   }
 
   // Build where clause based on filters
@@ -113,13 +104,13 @@ export async function GET(request: Request) {
   }))
 
   return NextResponse.json(transformedCards)
-}
+})
 
-export async function POST(request: Request) {
-  try {
-    await validateAdminAuth(request)
+export const POST = withErrorHandling(async (request: Request) => {
+  await checkRequestLimits(request, 'json')
+  await authenticateWithRole(request, Role.ADMIN)
 
-    const { id, designId } = await request.json()
+  const { id, designId } = await validateBody(request, createCardSchema)
 
     // Generate ntag424 values using the id as cid
     const serial = id.toUpperCase().replace(/:/g, '')
@@ -195,12 +186,5 @@ export async function POST(request: Request) {
       otc: card.otc || undefined
     }
 
-    return NextResponse.json(transformedCard)
-  } catch (error) {
-    console.error('Error creating card:', error)
-    return NextResponse.json(
-      { status: 'ERROR', reason: 'Error creating card' },
-      { status: 500 }
-    )
-  }
-}
+  return NextResponse.json(transformedCard)
+})

@@ -1,43 +1,24 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { validateNip98 } from '@/lib/nip98'
 import { getSettings } from '@/lib/settings'
+import { withErrorHandling } from '@/types/server/error-handler'
+import {
+  AuthorizationError,
+  ConflictError,
+  NotFoundError,
+} from '@/types/server/errors'
+import { userIdParam, updateLightningAddressSchema } from '@/lib/validation/schemas'
+import { validateParams, validateBody } from '@/lib/validation/middleware'
+import { checkRequestLimits } from '@/lib/middleware/request-limits'
+import { authenticate } from '@/lib/auth/unified-auth'
 
-export async function PUT(
-  request: Request,
-  { params }: { params: { userId: string } }
-) {
-  try {
-    const { pubkey: authenticatedPubkey } = await validateNip98(request)
+export const PUT = withErrorHandling(
+  async (request: Request, { params }: { params: Promise<{ userId: string }> }) => {
+    await checkRequestLimits(request, 'json')
+    const { pubkey: authenticatedPubkey } = await authenticate(request)
 
-    const { userId } = params
-    const { username: _username } = await request.json()
-
-    // Validate input
-    if (!userId || !_username) {
-      return NextResponse.json(
-        { error: 'User ID and username are required' },
-        { status: 400 }
-      )
-    }
-
-    // Clean and validate username
-    const username = _username.trim().toLowerCase()
-
-    // Validate username format: alphanumeric characters only, max 16 characters
-    if (!/^[a-z0-9]+$/.test(username)) {
-      return NextResponse.json(
-        { error: 'Username must contain only lowercase letters and numbers' },
-        { status: 400 }
-      )
-    }
-
-    if (username.length > 16) {
-      return NextResponse.json(
-        { error: 'Username must be 16 characters or less' },
-        { status: 400 }
-      )
-    }
+    const { userId } = validateParams(await params, userIdParam)
+    const { username } = await validateBody(request, updateLightningAddressSchema)
 
     // Check if user exists
     const user = await prisma.user.findUnique({
@@ -46,11 +27,11 @@ export async function PUT(
     })
 
     if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      throw new NotFoundError('User not found')
     }
 
     if (user.pubkey !== authenticatedPubkey) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+      throw new AuthorizationError('Not authorized to update this user')
     }
 
     // Check if user already has a lightning address
@@ -65,10 +46,7 @@ export async function PUT(
     })
 
     if (existingAddress && existingAddress.userId !== userId) {
-      return NextResponse.json(
-        { error: 'Username is already taken by another user' },
-        { status: 409 }
-      )
+      throw new ConflictError('Username is already taken by another user')
     }
 
     const { domain } = await getSettings(['domain'])
@@ -86,7 +64,7 @@ export async function PUT(
     }
 
     // Create the lightning address
-    const lightningAddress = await prisma.lightningAddress.create({
+    await prisma.lightningAddress.create({
       data: {
         username,
         userId
@@ -112,11 +90,5 @@ export async function PUT(
         ? `${oldLightningAddress.username}@${domain}`
         : null
     })
-  } catch (error) {
-    console.error('Error creating lightning address:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
   }
-}
+)

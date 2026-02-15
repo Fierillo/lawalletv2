@@ -2,60 +2,56 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import type { Card } from '@/types/card'
 import { validateAdminAuth } from '@/lib/admin-auth'
+import { withErrorHandling } from '@/types/server/error-handler'
+import { NotFoundError } from '@/types/server/errors'
+import { idParam } from '@/lib/validation/schemas'
+import { validateParams } from '@/lib/validation/middleware'
 
-export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
-  try {
+export const GET = withErrorHandling(
+  async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
     await validateAdminAuth(request)
-  } catch (response) {
-    if (response instanceof NextResponse) {
-      return response
-    }
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
+    const { id } = validateParams(await params, idParam)
 
-  const card = await prisma.card.findUnique({
-    where: { id: params.id },
-    select: {
-      id: true,
-      createdAt: true,
-      title: true,
-      lastUsedAt: true,
-      username: true,
-      otc: true,
-      design: {
-        select: {
-          id: true,
-          imageUrl: true,
-          description: true,
-          createdAt: true
-        }
-      },
-      ntag424: {
-        select: {
-          cid: true,
-          k0: true,
-          k1: true,
-          k2: true,
-          k3: true,
-          k4: true,
-          ctr: true,
-          createdAt: true
-        }
-      },
-      user: {
-        select: {
-          pubkey: true
+    const card = await prisma.card.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        createdAt: true,
+        title: true,
+        lastUsedAt: true,
+        username: true,
+        otc: true,
+        design: {
+          select: {
+            id: true,
+            imageUrl: true,
+            description: true,
+            createdAt: true
+          }
+        },
+        ntag424: {
+          select: {
+            cid: true,
+            k0: true,
+            k1: true,
+            k2: true,
+            k3: true,
+            k4: true,
+            ctr: true,
+            createdAt: true
+          }
+        },
+        user: {
+          select: {
+            pubkey: true
+          }
         }
       }
-    }
-  })
+    })
 
-  if (!card) {
-    return new NextResponse('Card not found', { status: 404 })
-  }
+    if (!card) {
+      throw new NotFoundError('Card not found')
+    }
 
   // Transform to match Card type
   const transformedCard: Card = {
@@ -75,19 +71,18 @@ export async function GET(
     otc: card.otc || undefined
   }
 
-  return NextResponse.json(transformedCard)
-}
+    return NextResponse.json(transformedCard)
+  }
+)
 
-export async function DELETE(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
-  try {
+export const DELETE = withErrorHandling(
+  async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
     await validateAdminAuth(request)
+    const { id } = validateParams(await params, idParam)
 
     // Find the card first to check if it exists and get ntag424 info
     const card = await prisma.card.findUnique({
-      where: { id: params.id },
+      where: { id },
       select: {
         id: true,
         ntag424Cid: true
@@ -95,14 +90,14 @@ export async function DELETE(
     })
 
     if (!card) {
-      return NextResponse.json({ error: 'Card not found' }, { status: 404 })
+      throw new NotFoundError('Card not found')
     }
 
     // Delete card and its associated ntag424 in a transaction
     await prisma.$transaction(async tx => {
       // Delete the card first (this will remove the foreign key reference)
       await tx.card.delete({
-        where: { id: params.id }
+        where: { id }
       })
 
       // Delete the associated ntag424 if it exists
@@ -115,14 +110,8 @@ export async function DELETE(
 
     return NextResponse.json({
       message: 'Card and associated NTAG424 deleted successfully',
-      cardId: params.id,
+      cardId: id,
       ntag424Cid: card.ntag424Cid
     })
-  } catch (error) {
-    console.error('Error deleting card:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
   }
-}
+)

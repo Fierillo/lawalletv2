@@ -2,24 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { LUD06CallbackSuccess } from '@/types/lnurl'
 import { LN, SATS } from '@getalby/sdk'
 import { prisma } from '@/lib/prisma'
+import { withErrorHandling } from '@/types/server/error-handler'
+import {
+  InternalServerError,
+  NotFoundError,
+} from '@/types/server/errors'
+import { lud16CallbackQuerySchema } from '@/lib/validation/schemas'
+import { validateQuery } from '@/lib/validation/middleware'
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { username: string } }
-) {
-  const _username = params.username
-  const username = _username.trim().toLowerCase()
-  const { searchParams } = new URL(req.url)
-  const amount = searchParams.get('amount')
+export const GET = withErrorHandling(
+  async (req: NextRequest, { params }: { params: Promise<{ username: string }> }) => {
+    const { username: _username } = await params
+    const username = _username.trim().toLowerCase()
+    const { amount } = validateQuery(req.url, lud16CallbackQuerySchema)
 
-  if (!amount) {
-    return NextResponse.json(
-      { status: 'ERROR', reason: 'Missing amount' },
-      { status: 400 }
-    )
-  }
-
-  try {
     // Look for the user with that lightning address
     const lightningAddress = await prisma.lightningAddress.findUnique({
       where: { username },
@@ -35,18 +31,12 @@ export async function GET(
 
     // If not found, return 404
     if (!lightningAddress) {
-      return NextResponse.json(
-        { status: 'ERROR', reason: 'Lightning address not found' },
-        { status: 404 }
-      )
+      throw new NotFoundError('Lightning address not found')
     }
 
     // If user doesn't have an nwc string, return 404
     if (!lightningAddress.user.nwc) {
-      return NextResponse.json(
-        { status: 'ERROR', reason: 'User not configured for payments' },
-        { status: 404 }
-      )
+      throw new NotFoundError('User not configured for payments')
     }
 
     const ln = new LN(lightningAddress.user.nwc)
@@ -60,10 +50,7 @@ export async function GET(
     const pr = invoiceObj.invoice || invoiceObj.invoice
 
     if (!pr) {
-      return NextResponse.json(
-        { status: 'ERROR', reason: 'Failed to generate invoice' },
-        { status: 500 }
-      )
+      throw new InternalServerError('Failed to generate invoice')
     }
 
     const response: LUD06CallbackSuccess = {
@@ -72,11 +59,5 @@ export async function GET(
     }
 
     return NextResponse.json(response)
-  } catch (error) {
-    console.error('Error in LUD16 callback route:', error)
-    return NextResponse.json(
-      { status: 'ERROR', reason: 'Internal server error' },
-      { status: 500 }
-    )
   }
-}
+)

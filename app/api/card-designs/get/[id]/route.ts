@@ -2,32 +2,29 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import type { CardDesign } from '@/types/card-design'
 import { validateAdminAuth } from '@/lib/admin-auth'
+import { withErrorHandling } from '@/types/server/error-handler'
+import { NotFoundError } from '@/types/server/errors'
+import { idParam } from '@/lib/validation/schemas'
+import { validateParams } from '@/lib/validation/middleware'
 
-export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
-  try {
+export const GET = withErrorHandling(
+  async (request: Request, { params }: { params: Promise<{ id: string }> }) => {
     await validateAdminAuth(request)
-  } catch (response) {
-    if (response instanceof NextResponse) {
-      return response
-    }
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-  const design = await prisma.cardDesign.findUnique({
-    where: { id: params.id },
-    select: {
-      id: true,
-      imageUrl: true,
-      description: true,
-      createdAt: true
-    }
-  })
+    const { id } = validateParams(await params, idParam)
+    const design = await prisma.cardDesign.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        imageUrl: true,
+        description: true,
+        createdAt: true
+      }
+    })
 
-  if (!design) {
-    return new NextResponse('Not found', { status: 404 })
-  }
+    if (!design) {
+      throw new NotFoundError('Design not found')
+    }
 
-  return NextResponse.json(design as CardDesign)
-}
+    return NextResponse.json(design as CardDesign)
+  }
+)

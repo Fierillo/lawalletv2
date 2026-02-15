@@ -1,20 +1,18 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import type { Card } from '@/types/card'
+import { withErrorHandling } from '@/types/server/error-handler'
+import { NotFoundError } from '@/types/server/errors'
+import { otcParam } from '@/lib/validation/schemas'
+import { validateParams } from '@/lib/validation/middleware'
+import { rateLimit } from '@/lib/middleware/rate-limit'
 
-export async function GET(
-  request: Request,
-  { params }: { params: { otc: string } }
-) {
-  try {
-    const { otc } = params
+export const GET = withErrorHandling(
+  async (request: Request, { params }: { params: Promise<{ otc: string }> }) => {
+    // Apply rate limiting for public OTC lookup
+    await rateLimit(request)
 
-    if (!otc) {
-      return NextResponse.json(
-        { error: 'OTC parameter is required' },
-        { status: 400 }
-      )
-    }
+    const { otc } = validateParams(await params, otcParam)
 
     const card = await prisma.card.findFirst({
       where: {
@@ -43,7 +41,7 @@ export async function GET(
     })
 
     if (!card) {
-      return NextResponse.json({ error: 'Card not found' }, { status: 404 })
+      throw new NotFoundError('Card not found')
     }
 
     // Transform to match Card type
@@ -58,11 +56,5 @@ export async function GET(
     }
 
     return NextResponse.json(transformedCard)
-  } catch (error) {
-    console.error('Error fetching card by OTC:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
   }
-}
+)
