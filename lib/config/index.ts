@@ -67,17 +67,12 @@ export interface AppConfig {
     }
   }
 
-  // Rate Limiting
-  rateLimit: {
-    enabled: boolean
-    windowMs: number
-    maxRequests: number
-    maxRequestsAuth: number
-    upstash: {
-      url: string | undefined
-      token: string | undefined
-      enabled: boolean
-    }
+  // Request Size Limits
+  requestLimits: {
+    maxJsonSize: number
+    maxBodySize: number
+    maxFileSize: number
+    maxFiles: number
   }
 }
 
@@ -153,6 +148,13 @@ export function getConfig(strict: boolean = true): AppConfig {
         token: env.UPSTASH_REDIS_TOKEN,
         enabled: !!(env.UPSTASH_REDIS_URL && env.UPSTASH_REDIS_TOKEN)
       }
+    },
+
+    requestLimits: {
+      maxJsonSize: env.REQUEST_MAX_JSON_SIZE,
+      maxBodySize: env.REQUEST_MAX_BODY_SIZE,
+      maxFileSize: env.REQUEST_MAX_FILE_SIZE,
+      maxFiles: env.REQUEST_MAX_FILES
     }
   }
 
