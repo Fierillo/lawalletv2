@@ -29,7 +29,7 @@ function WalletLoginPageContent() {
 
     try {
       const privateKeyHex = generatePrivateKey()
-      loginWithPrivateKey(privateKeyHex)
+      await loginWithPrivateKey(privateKeyHex)
       router.push('/wallet')
     } catch (err) {
       setError('Failed to generate wallet. Please try again.')
@@ -56,9 +56,11 @@ function WalletLoginPageContent() {
 
     try {
       const privateKeyHex = nsecToHex(nsecInput.trim())
-      loginWithPrivateKey(privateKeyHex)
+      await loginWithPrivateKey(privateKeyHex)
+      router.push('/wallet')
     } catch (err) {
       setError('Failed to import wallet. Please check your private key.')
+    } finally {
       setIsLoading(false)
     }
   }
@@ -69,7 +71,7 @@ function WalletLoginPageContent() {
     try {
       if (hasNip07Extension()) {
         const pubkey = await loginWithNip07(window.nostr!)
-        loginWithSigner(window.nostr!)
+        await loginWithSigner(window.nostr!)
         setLoginMethod('nip07')
         router.push('/wallet')
         return
@@ -96,36 +98,40 @@ function WalletLoginPageContent() {
 
   // Handle Amber callback
   useEffect(() => {
-    if (sessionStorage.getItem('amberProcessed')) return
+    const handleAmberCallback = async () => {
+      if (sessionStorage.getItem('amberProcessed')) return
 
-    const pubkey = searchParams.get('pubkey') || searchParams.get('result')
-    if (pubkey) {
-      const url = new URL(window.location.href)
-      url.searchParams.delete('pubkey')
-      url.searchParams.delete('result')
-      window.history.replaceState({}, '', url.toString())
+      const pubkey = searchParams.get('pubkey') || searchParams.get('result')
+      if (pubkey) {
+        const url = new URL(window.location.href)
+        url.searchParams.delete('pubkey')
+        url.searchParams.delete('result')
+        window.history.replaceState({}, '', url.toString())
 
-      if (!/^[0-9a-f]{64}$/i.test(pubkey)) {
-        setError('Invalid pubkey from Amber')
-        setIsLoading(false)
-        return
+        if (!/^[0-9a-f]{64}$/i.test(pubkey)) {
+          setError('Invalid pubkey from Amber')
+          setIsLoading(false)
+          return
+        }
+
+        const amberSigner = {
+          getPublicKey: async () => pubkey,
+          signEvent: async (event: any) => ({
+            ...event,
+            sig: '00'.repeat(64)
+          })
+        } as any
+
+        await loginWithSigner(amberSigner)
+        setLoginMethod('amber')
+        setUserId(`amber-${pubkey.slice(0, 8)}`)
+        sessionStorage.setItem('amberProcessed', 'true')
+        router.push('/wallet')
       }
-
-      const amberSigner = {
-        getPublicKey: async () => pubkey,
-        signEvent: async (event: any) => ({
-          ...event,
-          sig: '00'.repeat(64)
-        })
-      } as any
-
-      loginWithSigner(amberSigner)
-      setLoginMethod('amber')
-      setUserId(`amber-${pubkey.slice(0, 8)}`)
-      sessionStorage.setItem('amberProcessed', 'true')
-      router.push('/wallet')
     }
-  }, [searchParams, loginWithSigner, setUserId, router])
+
+    handleAmberCallback()
+  }, [searchParams, loginWithSigner, setUserId, router, setLoginMethod])
 
   useEffect(() => {
     if (signer) {
