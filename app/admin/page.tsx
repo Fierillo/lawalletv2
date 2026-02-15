@@ -20,7 +20,7 @@ import { useAPI } from '@/providers/api'
 import { useSettings } from '@/hooks/use-settings'
 
 export default function AdminPage() {
-  const { signer } = useAPI()
+  const { signer, publicKey } = useAPI()
   const { list, count, getStatusCounts } = useCards()
   const { count: countCardDesign } = useCardDesigns()
   const { settings } = useSettings()
@@ -40,8 +40,13 @@ export default function AdminPage() {
   const [recentCards, setRecentCards] = useState<CardType[]>([])
   const [recentAddresses, setRecentAddresses] = useState<any[]>([])
 
-  // Fetch data on component mount
+  // Check if user is admin (root user in settings)
+  const isAdmin = settings?.root === publicKey
+
+  // Fetch data only if user is admin
   useEffect(() => {
+    if (!isAdmin) return
+
     const fetchData = async () => {
       try {
         const [
@@ -72,15 +77,7 @@ export default function AdminPage() {
     }
 
     fetchData()
-  }, [
-    cardDesignCount,
-    count,
-    getStatusCounts,
-    list,
-    listAddresses,
-    countCardDesign,
-    countAddresses
-  ])
+  }, [isAdmin, count, getStatusCounts, list, listAddresses, countCardDesign, countAddresses])
 
   if (!signer) return null
 
