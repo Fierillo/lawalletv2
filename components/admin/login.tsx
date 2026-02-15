@@ -40,7 +40,7 @@ export function Login() {
       }
 
       const pubkey = await loginWithNip07(window.nostr!)
-      loginWithSigner(window.nostr!)
+      await loginWithSigner(window.nostr!)
       console.log('[NIP-07] Login successful:', pubkey)
     } catch (err) {
       console.error('[NIP-07] Login error:', err)
@@ -57,7 +57,7 @@ export function Login() {
       if (!nsec.startsWith('nsec1')) {
         throw new Error('Invalid nsec format. Must start with nsec1')
       }
-      loginWithPrivateKey(nsecToHex(nsec))
+      await loginWithPrivateKey(nsecToHex(nsec))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to login with nsec')
     } finally {
