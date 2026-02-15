@@ -66,6 +66,14 @@ export interface AppConfig {
       enabled: boolean
     }
   }
+
+  // Request Size Limits
+  requestLimits: {
+    maxBodySize: number
+    maxJsonSize: number
+    maxFileSize: number
+    maxFiles: number
+  }
 }
 
 let cachedConfig: AppConfig | null = null
@@ -140,6 +148,13 @@ export function getConfig(strict: boolean = true): AppConfig {
         token: env.UPSTASH_REDIS_TOKEN,
         enabled: !!(env.UPSTASH_REDIS_URL && env.UPSTASH_REDIS_TOKEN)
       }
+    },
+
+    requestLimits: {
+      maxBodySize: env.REQUEST_MAX_BODY_SIZE,
+      maxJsonSize: env.REQUEST_MAX_JSON_SIZE,
+      maxFileSize: env.REQUEST_MAX_FILE_SIZE,
+      maxFiles: env.REQUEST_MAX_FILES
     }
   }
 
