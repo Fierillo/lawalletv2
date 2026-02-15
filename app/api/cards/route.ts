@@ -3,10 +3,11 @@ import { prisma } from '@/lib/prisma'
 import type { Card } from '@/types/card'
 import { generateNtag424Values } from '@/lib/ntag424'
 import { randomBytes } from 'crypto'
-import { validateAdminAuth } from '@/lib/admin-auth'
 import { withErrorHandling } from '@/types/server/error-handler'
 import { createCardSchema, cardListQuerySchema } from '@/lib/validation/schemas'
 import { validateBody, validateQuery } from '@/lib/validation/middleware'
+import { authenticateWithRole } from '@/lib/auth/unified-auth'
+import { Role } from '@/lib/auth/permissions'
 import { checkRequestLimits } from '@/lib/middleware/request-limits'
 
 interface CardFilters {
@@ -15,7 +16,7 @@ interface CardFilters {
 }
 
 export const GET = withErrorHandling(async (request: Request) => {
-  await validateAdminAuth(request)
+  await authenticateWithRole(request, Role.ADMIN)
 
   const query = validateQuery(request.url, cardListQuerySchema)
 
@@ -107,7 +108,7 @@ export const GET = withErrorHandling(async (request: Request) => {
 
 export const POST = withErrorHandling(async (request: Request) => {
   await checkRequestLimits(request, 'json')
-  await validateAdminAuth(request)
+  await authenticateWithRole(request, Role.ADMIN)
 
   const { id, designId } = await validateBody(request, createCardSchema)
 

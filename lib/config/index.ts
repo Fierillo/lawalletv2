@@ -69,8 +69,8 @@ export interface AppConfig {
 
   // Request Size Limits
   requestLimits: {
-    maxJsonSize: number
     maxBodySize: number
+    maxJsonSize: number
     maxFileSize: number
     maxFiles: number
   }
@@ -151,8 +151,8 @@ export function getConfig(strict: boolean = true): AppConfig {
     },
 
     requestLimits: {
-      maxJsonSize: env.REQUEST_MAX_JSON_SIZE,
       maxBodySize: env.REQUEST_MAX_BODY_SIZE,
+      maxJsonSize: env.REQUEST_MAX_JSON_SIZE,
       maxFileSize: env.REQUEST_MAX_FILE_SIZE,
       maxFiles: env.REQUEST_MAX_FILES
     }
