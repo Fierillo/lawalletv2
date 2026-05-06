@@ -11,6 +11,7 @@ import { validateNip98Auth } from '@/lib/admin-auth'
 import { eventBus } from '@/lib/events/event-bus'
 import { probeLud21Support } from '@/lib/lnurl-probe'
 import { ActivityEvent, logActivity } from '@/lib/activity-log'
+import { normalizePublicHost, normalizePublicSubdomain } from '@/lib/public-url-utils'
 
 async function authenticateSettingsRequest(request: NextRequest): Promise<string> {
   const authHeader = request.headers.get('authorization')
@@ -80,6 +81,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   // Fetch all settings records from the database
   const settings = await getSettings([
     'root',
+    'domain',
+    'endpoint',
+    'subdomain',
     'registration_ln_address',
     'registration_price',
     'registration_ln_enabled',
@@ -91,6 +95,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   }
 
   const body = await validateBody(request, settingsBodySchema)
+  const effectiveDomain = body.domain ?? settings.domain ?? ''
 
   // Precondition check: if paid registration is enabled after this save,
   // the configured LN address must be reachable, in-range for the price,
@@ -135,7 +140,13 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       (acc, [name, value]) => {
         const normalizedName = name.trim().toLowerCase()
         const key = normalizedName === 'subdomain' ? 'endpoint' : normalizedName
-        acc[key] = { name: key, value }
+        const normalizedValue =
+          key === 'domain'
+            ? normalizePublicHost(value)
+            : key === 'endpoint'
+              ? normalizePublicSubdomain(value, effectiveDomain)
+              : value
+        acc[key] = { name: key, value: normalizedValue }
         return acc
       },
       {} as Record<string, { name: string; value: string }>

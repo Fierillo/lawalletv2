@@ -24,6 +24,7 @@ import { useSettings, useUpdateSettings } from '@/lib/client/hooks/use-settings'
 import { useSettingsForm } from '@/components/admin/settings/settings-form-context'
 import { useAuth } from '@/components/admin/auth-context'
 import { cn } from '@/lib/utils'
+import { normalizePublicHost, normalizePublicSubdomain } from '@/lib/public-url-utils'
 
 const IS_DEV = process.env.NODE_ENV !== 'production'
 
@@ -131,8 +132,8 @@ export function InfrastructureTab() {
   // Relays and blossom servers are stored as JSON-stringified arrays of non-empty trimmed entries.
   const save = useCallback(async () => {
     await updateSettings({
-      domain: domain.trim().toLowerCase(),
-      endpoint: subdomain.trim().replace(/\/+$/, '').toLowerCase(),
+      domain: normalizePublicHost(domain),
+      endpoint: normalizePublicSubdomain(subdomain, domain),
       relays: JSON.stringify(relays.map(r => r.trim()).filter(Boolean)),
       blossom_servers: JSON.stringify(blossomServers.map(s => s.trim()).filter(Boolean)),
       smtp_host: smtpHost.trim().toLowerCase(),

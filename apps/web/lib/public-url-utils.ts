@@ -1,5 +1,29 @@
-function normalizePart(value?: string): string {
-  return value?.trim().toLowerCase() || ''
+export function normalizePublicHost(value?: string): string {
+  const raw = value?.trim().toLowerCase().replace(/\/+$/, '') || ''
+  if (!raw) {
+    return ''
+  }
+
+  try {
+    return new URL(raw.includes('://') ? raw : `https://${raw}`).host
+  } catch {
+    return raw
+  }
+}
+
+export function normalizePublicSubdomain(subdomain?: string, domain?: string): string {
+  const cleanDomain = normalizePublicHost(domain)
+  const cleanSubdomain = normalizePublicHost(subdomain)
+
+  if (!cleanSubdomain || cleanSubdomain === cleanDomain) {
+    return ''
+  }
+
+  if (cleanDomain && cleanSubdomain.endsWith(`.${cleanDomain}`)) {
+    return cleanSubdomain.slice(0, -cleanDomain.length - 1)
+  }
+
+  return cleanSubdomain.includes('.') ? '' : cleanSubdomain
 }
 
 function isLocalHost(host: string): boolean {
@@ -17,8 +41,8 @@ function isLocalHost(host: string): boolean {
  * lowercasing and trimming both. Returns `''` when `domain` is missing.
  */
 export function buildPublicHost(domain?: string, subdomain?: string): string {
-  const cleanDomain = normalizePart(domain)
-  const cleanSubdomain = normalizePart(subdomain)
+  const cleanDomain = normalizePublicHost(domain)
+  const cleanSubdomain = normalizePublicSubdomain(subdomain, cleanDomain)
 
   if (!cleanDomain) {
     return ''
@@ -32,7 +56,7 @@ export function buildPublicHost(domain?: string, subdomain?: string): string {
  * `https://` otherwise. Returns `''` when `host` is missing.
  */
 export function buildPublicUrl(host?: string): string {
-  const cleanHost = normalizePart(host)
+  const cleanHost = normalizePublicHost(host)
 
   if (!cleanHost) {
     return ''
