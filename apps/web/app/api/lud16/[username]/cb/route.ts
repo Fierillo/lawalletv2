@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { LUD06CallbackSuccess } from '@/types/lnurl'
+import { LUD06CallbackError, LUD06CallbackSuccess } from '@/types/lnurl'
 import { LN, SATS } from '@getalby/sdk'
 import { prisma } from '@/lib/prisma'
 import { withErrorHandling } from '@/types/server/error-handler'
@@ -22,6 +22,24 @@ import type { Prisma } from '@/lib/generated/prisma'
 import { logger } from '@/lib/logger'
 import { resolvePaymentRoute } from '@/lib/wallet/resolve-payment-route'
 import { eventBus } from '@/lib/events/event-bus'
+
+const NWC_INVOICE_TIMEOUT_MS = 15000
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms)
+    promise.then(
+      value => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      error => {
+        clearTimeout(timer)
+        reject(error)
+      }
+    )
+  })
+}
 
 export const GET = withErrorHandling(
   async (req: NextRequest, { params }: { params: Promise<{ username: string }> }) => {
@@ -94,9 +112,25 @@ export const GET = withErrorHandling(
     // uses the user's primary (or legacy `User.nwc` fallback).
     const ln = new LN(route.connectionString)
     const amountSats = Math.floor(Number(amount) / 1000)
-    const invoiceObj = await ln.requestPayment(SATS(amountSats), {
-      description,
+    const invoiceObj = await withTimeout(
+      ln.requestPayment(SATS(amountSats), {
+        description,
+      }),
+      NWC_INVOICE_TIMEOUT_MS,
+      'NWC wallet did not respond in time'
+    ).catch(error => {
+      const reason = error instanceof Error ? error.message : 'Failed to generate invoice'
+      logger.warn({ username, amountSats, error: reason }, 'LUD-16 NWC invoice request failed')
+      const response: LUD06CallbackError = {
+        status: 'ERROR',
+        reason: 'Could not generate invoice from the configured wallet. Please try again later.',
+      }
+      return NextResponse.json(response)
     })
+
+    if (invoiceObj instanceof NextResponse) {
+      return invoiceObj
+    }
 
     const pr = invoiceObj.invoice?.paymentRequest
     if (!pr) {
