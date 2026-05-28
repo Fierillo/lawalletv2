@@ -63,8 +63,31 @@ function isValidUrlWithProtocol(value: string, allowed: readonly string[]): bool
   }
 }
 
+// Endpoint accepts a full URL (https://... or http://...) or a bare host —
+// missing protocol falls back to https on the server. Reject only inputs
+// that don't parse as either form.
+function isValidEndpoint(value: string): boolean {
+  const trimmed = value.trim()
+  if (!trimmed) return true
+  if (/^https?:\/\//i.test(trimmed)) {
+    return isValidUrlWithProtocol(trimmed, HTTP_PROTOCOLS)
+  }
+  // Bare host: validate by attaching https:// and parsing.
+  return isValidUrlWithProtocol(`https://${trimmed}`, HTTP_PROTOCOLS)
+}
+
 const HTTP_PROTOCOLS = ['http:', 'https:'] as const
 const WS_PROTOCOLS = ['ws:', 'wss:'] as const
+
+// Accept Google Tag IDs across the GA / GTM / Ads / Campaign Manager families.
+// Empty string is also valid — that's the disable signal.
+const GTAG_ID_PATTERN = /^(G-[A-Z0-9]{6,}|GT-[A-Z0-9]{6,}|AW-\d+|DC-\d+|UA-\d+-\d+)$/
+
+function isValidGtagId(value: string): boolean {
+  const trimmed = value.trim()
+  if (trimmed === '') return true
+  return GTAG_ID_PATTERN.test(trimmed)
+}
 
 // Classes to apply an error state to an Input or InputGroup border.
 // tailwind-merge lets the later `border-destructive` win over `border-input`/`border-border`.
@@ -101,6 +124,7 @@ export function InfrastructureTab() {
   const [smtpPort, setSmtpPort] = useState('')
   const [smtpUsername, setSmtpUsername] = useState('')
   const [smtpPassword, setSmtpPassword] = useState('')
+  const [gtagId, setGtagId] = useState('')
 
   // Capture the current browser origin once on mount for the endpoint placeholder
   useEffect(() => {
@@ -121,6 +145,7 @@ export function InfrastructureTab() {
     setSmtpPort(settings.smtp_port ?? '')
     setSmtpUsername(settings.smtp_username ?? '')
     setSmtpPassword(settings.smtp_password ?? '')
+    setGtagId(settings.gtag_id ?? '')
   }, [settings])
 
   useEffect(() => {
@@ -140,6 +165,7 @@ export function InfrastructureTab() {
       smtp_port: smtpPort.trim(),
       smtp_username: smtpUsername.trim(),
       smtp_password: smtpPassword,
+      gtag_id: gtagId.trim(),
     })
   }, [
     updateSettings,
@@ -151,6 +177,7 @@ export function InfrastructureTab() {
     smtpPort,
     smtpUsername,
     smtpPassword,
+    gtagId,
   ])
 
   const { markChanged, setInvalid } = useSettingsForm('infrastructure', save, loadFromSettings)
@@ -158,8 +185,7 @@ export function InfrastructureTab() {
   // Per-field validity — empty inputs are treated as valid (they're simply
   // not included in the save payload). Only non-empty, malformed values flag.
   const domainInvalid = domain.trim() !== '' && !isValidDomain(domain)
-  const endpointInvalid =
-    subdomain.trim() !== '' && !isValidUrlWithProtocol(subdomain, HTTP_PROTOCOLS)
+  const endpointInvalid = !isValidEndpoint(subdomain)
   const relayInvalid = relays.map(
     r => r.trim() !== '' && !isValidUrlWithProtocol(r, WS_PROTOCOLS)
   )
@@ -167,6 +193,7 @@ export function InfrastructureTab() {
     s => s.trim() !== '' && !isValidUrlWithProtocol(s, HTTP_PROTOCOLS)
   )
   const smtpHostInvalid = smtpHost.trim() !== '' && !isValidDomain(smtpHost)
+  const gtagIdInvalid = !isValidGtagId(gtagId)
 
   // Collapse all per-field flags into a single primitive so the effect only
   // fires when the aggregate state actually changes (relay/blossom arrays
@@ -176,7 +203,8 @@ export function InfrastructureTab() {
     endpointInvalid ||
     relayInvalid.some(Boolean) ||
     blossomInvalid.some(Boolean) ||
-    smtpHostInvalid
+    smtpHostInvalid ||
+    gtagIdInvalid
 
   useEffect(() => {
     setInvalid(anyInvalid)
@@ -274,11 +302,11 @@ export function InfrastructureTab() {
             />
             {endpointInvalid ? (
               <p className="text-xs text-destructive">
-                Enter a full URL with http:// or https://.
+                Enter a full URL or hostname (e.g. app.example.com).
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Full public URL where this instance is running.
+                Public URL where this instance is running. Defaults to https:// if no protocol is provided.
               </p>
             )}
           </div>
@@ -414,6 +442,42 @@ export function InfrastructureTab() {
               value={smtpPassword}
               onChange={e => { setSmtpPassword(e.target.value); markChanged() }}
             />
+          </div>
+        </div>
+      </div>
+
+      <Separator />
+
+      <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-8">
+        <div>
+          <h3 className="text-sm font-semibold">Analytics</h3>
+          <p className="text-sm text-muted-foreground mt-1">
+            Optional Google Analytics integration. Leave empty to disable.
+          </p>
+        </div>
+        <div className="flex flex-col gap-4">
+          <div className="space-y-1">
+            <Label>Google Tag ID</Label>
+            <Input
+              placeholder="G-XXXXXXXXXX"
+              value={gtagId}
+              onChange={e => {
+                setGtagId(e.target.value)
+                markChanged()
+              }}
+              aria-invalid={gtagIdInvalid || undefined}
+              className={cn(gtagIdInvalid && INVALID_CLASSES)}
+            />
+            {gtagIdInvalid ? (
+              <p className="text-xs text-destructive">
+                Enter a valid Google Tag ID (e.g. G-XXXXXXXXXX, GT-XXXXXXX, AW-XXXXXXXX).
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Loads gtag.js across the site, dashboard, and wallet. Users stay
+                anonymous: no Nostr keys, lightning addresses, or amounts are sent.
+              </p>
+            )}
           </div>
         </div>
       </div>

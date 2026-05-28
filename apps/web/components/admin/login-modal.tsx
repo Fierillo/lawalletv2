@@ -1,7 +1,19 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback } from 'react'
-import { Key, Globe, Plug, Eye, EyeOff, AlertTriangle, QrCode, Copy, Link, RefreshCw } from 'lucide-react'
+import {
+  Key,
+  Globe,
+  Plug,
+  Eye,
+  EyeOff,
+  AlertTriangle,
+  QrCode,
+  Copy,
+  Link,
+  RefreshCw,
+  Smartphone,
+} from 'lucide-react'
 import { QRCodeSVG } from 'qrcode.react'
 import { toast } from 'sonner'
 import {
@@ -25,6 +37,8 @@ import {
   createNostrConnectSigner,
   hasBrowserExtension,
 } from '@/lib/client/nostr-signer'
+import { trackEvent } from '@/lib/analytics/gtag'
+import { AnalyticsEvent } from '@/lib/analytics/events'
 
 interface LoginModalProps {
   open: boolean
@@ -119,10 +133,12 @@ function ExtensionTab() {
 
   async function handleConnect() {
     setLoading(true)
+    trackEvent(AnalyticsEvent.LOGIN_STARTED, { method: 'extension' })
     try {
       const signer = createBrowserSigner()
       await login(signer, 'extension')
     } catch (error) {
+      trackEvent(AnalyticsEvent.LOGIN_FAILED, { method: 'extension' })
       toast.error(error instanceof Error ? error.message : 'Failed to connect with extension')
     } finally {
       setLoading(false)
@@ -186,11 +202,13 @@ function NsecTab() {
     e.preventDefault()
     setError(null)
     setLoading(true)
+    trackEvent(AnalyticsEvent.LOGIN_STARTED, { method: 'nsec' })
 
     try {
       const signer = createNsecSigner(nsec)
       await login(signer, 'nsec')
     } catch (err) {
+      trackEvent(AnalyticsEvent.LOGIN_FAILED, { method: 'nsec' })
       const message = err instanceof Error ? err.message : 'Failed to login'
       setError(message)
       toast.error(message)
@@ -317,6 +335,7 @@ function BunkerQRMode() {
     setError(null)
     setStatus('generating')
     setCopied(false)
+    trackEvent(AnalyticsEvent.LOGIN_STARTED, { method: 'bunker', flow: 'qr' })
 
     try {
       const signer = await createNostrConnectSigner({
@@ -334,6 +353,7 @@ function BunkerQRMode() {
       await login(signer, 'bunker')
     } catch (err) {
       if (controller.signal.aborted) return
+      trackEvent(AnalyticsEvent.LOGIN_FAILED, { method: 'bunker', flow: 'qr' })
       const message = err instanceof Error ? err.message : 'Failed to connect'
       setError(message.includes('timed out') || message.includes('abort')
         ? 'Connection timed out. Make sure your signer app scanned the QR code.'
@@ -391,10 +411,27 @@ function BunkerQRMode() {
         <QRCodeSVG value={uri!} size={200} />
       </div>
 
-      <Button variant="ghost" size="sm" onClick={handleCopy} className="text-xs">
-        <Copy className="mr-1.5 size-3.5" />
-        {copied ? 'Copied!' : 'Copy URI'}
-      </Button>
+      <div className="flex w-full flex-col gap-2 sm:flex-row">
+        <Button
+          asChild
+          className="flex-1 bg-amber-400 text-black hover:bg-amber-300"
+        >
+          <a href={uri!}>
+            <Smartphone className="mr-2 size-4" />
+            Login with Amber
+          </a>
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleCopy}
+          className="flex-1 text-xs"
+        >
+          <Copy className="mr-1.5 size-3.5" />
+          {copied ? 'Copied!' : 'Copy URI'}
+        </Button>
+      </div>
 
       <div className="flex items-center gap-2 text-xs text-muted-foreground">
         <Spinner size={12} />
@@ -430,10 +467,12 @@ function BunkerPasteMode() {
     }
 
     setLoading(true)
+    trackEvent(AnalyticsEvent.LOGIN_STARTED, { method: 'bunker', flow: 'paste' })
     try {
       const signer = await createBunkerSigner(bunkerUrl, { timeout: 30_000 })
       await login(signer, 'bunker')
     } catch (err) {
+      trackEvent(AnalyticsEvent.LOGIN_FAILED, { method: 'bunker', flow: 'paste' })
       const message = err instanceof Error ? err.message : 'Failed to connect to bunker'
       setError(message)
       toast.error(message)

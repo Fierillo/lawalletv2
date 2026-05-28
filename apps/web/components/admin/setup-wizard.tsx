@@ -13,9 +13,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { useAuth } from '@/components/admin/auth-context'
 import { useNostrProfile } from '@/lib/client/nostr-profile'
 import { checkRootStatus, claimRootRole } from '@/lib/client/auth-api'
-import { buildPublicHost } from '@/lib/public-url-utils'
+import { parseEndpoint } from '@/lib/public-url-utils'
 import { truncateNpub } from '@/lib/client/format'
 import { cn } from '@/lib/utils'
+import { trackEvent } from '@/lib/analytics/gtag'
+import { AnalyticsEvent } from '@/lib/analytics/events'
 
 // Hostname only — no protocol, no path. Mirrors the validator used by
 // the Infrastructure settings tab so onboarding rejects the same things
@@ -43,23 +45,6 @@ type WizardStep =
   | 'confirm'
   | 'claiming'
   | 'hidden'
-
-function deriveSubdomainFromUrl(url: string, domain: string): string {
-  const raw = url.trim().toLowerCase()
-  if (!raw) return ''
-  let host: string
-  try {
-    host = new URL(raw.includes('://') ? raw : `https://${raw}`).host
-  } catch {
-    return ''
-  }
-  const cleanDomain = domain.trim().toLowerCase()
-  if (!cleanDomain || host === cleanDomain) return ''
-  if (host.endsWith(`.${cleanDomain}`)) {
-    return host.slice(0, -cleanDomain.length - 1)
-  }
-  return ''
-}
 
 interface CommunityData {
   id: string
@@ -139,6 +124,7 @@ export function SetupWizard() {
           // fires after the user confirms. The rest of the wizard runs
           // as ADMIN (settings POST needs SETTINGS_WRITE).
           setStep('confirm-root')
+          trackEvent(AnalyticsEvent.SETUP_STARTED)
         }
       } catch {
         // API error — don't show onboarding
@@ -166,6 +152,7 @@ export function SetupWizard() {
       // (settings POST needs ADMIN). Skip if loginMethod is gone — rare,
       // but the next reload will re-exchange anyway.
       if (loginMethod) await login(signer, loginMethod)
+      trackEvent(AnalyticsEvent.SETUP_STEP_COMPLETED, { step: 'confirm_root' })
       setStep('loading')
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to claim root role')
@@ -251,6 +238,7 @@ export function SetupWizard() {
       }
 
       setVerified(true)
+      trackEvent(AnalyticsEvent.SETUP_STEP_COMPLETED, { step: 'domain_verified' })
       toast.success(`${cleanDomain} verified`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Verification failed')
@@ -306,10 +294,10 @@ export function SetupWizard() {
       // left is persisting the chosen domain/community and importing
       // related assets.
       const cleanDomain = domain.trim().toLowerCase()
-      const cleanSubdomain = deriveSubdomainFromUrl(endpointUrl, cleanDomain)
+      const cleanEndpoint = endpointUrl.trim().replace(/\/+$/, '').toLowerCase()
       await apiClient.post('/api/settings', {
         domain: cleanDomain,
-        endpoint: cleanSubdomain,
+        endpoint: cleanEndpoint,
         ...(community ? buildCommunitySettings(community) : {}),
       })
 
@@ -325,6 +313,9 @@ export function SetupWizard() {
         }
       }
 
+      trackEvent(AnalyticsEvent.SETUP_COMPLETED, {
+        community: community ? 'matched' : 'none',
+      })
       toast.success('Setup complete! You are now the root administrator.')
       setStep('hidden')
     } catch (error) {
@@ -476,7 +467,7 @@ export function SetupWizard() {
   }
 
   const fullDomain =
-    buildPublicHost(domain, deriveSubdomainFromUrl(endpointUrl, domain)) ||
+    parseEndpoint(endpointUrl)?.host ||
     domain ||
     'your community'
 
