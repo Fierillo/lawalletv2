@@ -1,3 +1,8 @@
+> [!CAUTION]
+> ## PROYECTO DESCONTINUADO Y SIN MANTENIMIENTO
+>
+> Este repositorio se conserva únicamente como referencia. No recibe actualizaciones, correcciones de seguridad ni soporte.
+
 <img src="/public/logos/lawallet.svg" alt="LaWallet Logo" width="400" />
 
 # LaWallet NWC
